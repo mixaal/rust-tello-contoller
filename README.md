@@ -1,6 +1,6 @@
-# rust-tello-contoller
+# rust-tello-controller
 
-![build](https://github.com/mixaal/rust-tello-controller/actions/workflows/rust.yml/badge.svg)
+![build](https://github.com/mixaal/rust-tello-contoller/actions/workflows/rust.yml/badge.svg)
 Control DJI Ryze Tello from rust with XBOX gamepad
 
 ## Quick Start
