@@ -211,5 +211,6 @@ impl UI {
                 last_state = st;
             }
         }
+        tracing::info!("exiting mainloop");
     }
 }

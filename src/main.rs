@@ -15,7 +15,8 @@ fn main() {
 
     let (update_tx, update_rx) = rust_tello::comm_channel();
     let (video_tx, video_rx) = mpsc::channel();
-    let _h = tello.start_ctrl_receiver(update_tx);
+
+    let h = tello.start_ctrl_receiver(update_tx);
     tello.start_video_receiver(video_tx);
     tello.start_video_contoller();
 
@@ -30,7 +31,6 @@ fn main() {
     }
     tello.start_stick_update();
     tracing::info!("use gamepad to fly the drone");
-
     let ui = UI::new(3440, 1440);
     ui.mainloop(tello, update_rx, video_rx);
 }
