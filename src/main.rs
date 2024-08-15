@@ -17,7 +17,7 @@ fn main() {
     let (video_tx, video_rx) = mpsc::channel();
 
     let h = tello.start_ctrl_receiver(update_tx);
-    tello.start_video_receiver(video_tx);
+    tello.start_video_receiver(video_tx, 32768);
     tello.start_video_contoller();
 
     tello.connect();

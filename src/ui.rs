@@ -24,6 +24,16 @@ lazy_static! {
     static ref UPDATE_DATA: RwLock<UpdateData> = RwLock::new(UpdateData::default());
 }
 
+fn update_data(ctrl_rx: Receiver<UpdateData>) {
+    loop {
+        if let Ok(update) = ctrl_rx.recv() {
+            let mut g = UPDATE_DATA.write().unwrap();
+            *g = update;
+            drop(g);
+        }
+    }
+}
+
 impl UI {
     pub fn new(width: u32, height: u32) -> Self {
         Self {
@@ -40,6 +50,7 @@ impl UI {
         video_rx: Receiver<Vec<u8>>,
     ) {
         let mut playing = true;
+        thread::spawn(move || update_data(ctrl_rx));
 
         let js = Gamepad::new("/dev/input/js0", gamepad::XBOX_MAPPING.clone());
         js.background_handler();
@@ -113,7 +124,7 @@ impl UI {
             CommonWidgetProps::new(&canvas)
                 .place(0.5, 0.9)
                 .size(0.8, 0.1),
-            "examples/widget-demo/images",
+            "./save_pics",
             10,
         )
         .on_window(&mut win);
@@ -123,13 +134,8 @@ impl UI {
         )
         .on_window(&mut win);
 
-        battery.write().unwrap().set(0.09);
-        wifi_strength.write().unwrap().set(0.4);
-
         sensitivity.write().unwrap().inc();
         let mut last_state = GamepadState::initial();
-        let mut pitch = 0.0;
-        let mut roll = 0.0;
         while playing {
             // reset game state
 
@@ -148,7 +154,33 @@ impl UI {
                 // finally draw the game and maintain fps
                 let st = js.state();
 
-                horizon.write().unwrap().set(pitch, roll, 120.0);
+                let g_data = UPDATE_DATA.read().unwrap();
+                if let Some(ref wifi) = g_data.wifi {
+                    wifi_strength
+                        .write()
+                        .unwrap()
+                        .set(wifi.wifi_strength as f32 / 100.0);
+                }
+                if let Some(ref flight) = g_data.flight {
+                    battery
+                        .write()
+                        .unwrap()
+                        .set(flight.battery_percentage as f32 / 100.0);
+                }
+                if let Some(ref light) = g_data.light {
+                    light_signal.write().unwrap().now();
+                }
+                if let Some(ref log_record) = g_data.log {
+                    if let Some(imu) = &log_record.imu {
+                        horizon.write().unwrap().set(
+                            imu.pitch as f32,
+                            imu.roll as f32,
+                            imu.yaw as f32,
+                        );
+                        drone_yaw.write().unwrap().set(imu.yaw as f32);
+                    }
+                }
+                drop(g_data);
 
                 let a_clicked = st.button_clicked(gamepad::Buttons::A, &last_state);
                 if a_clicked {
@@ -195,8 +227,6 @@ impl UI {
                 if horiz > 0.0 {
                     image_carousel.write().unwrap().turn_right();
                 }
-                pitch += ls.1;
-                roll += rs.0;
 
                 vert_thrust.write().unwrap().set(vert_speed);
 
