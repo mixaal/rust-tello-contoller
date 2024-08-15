@@ -6,7 +6,7 @@ use std::{
 
 use rust_gamepad::gamepad::{self, Gamepad, GamepadState};
 use rust_sdl_ui::{
-    color::RgbColor,
+    color::{self, RgbColor},
     desktop::{self, CommonWidgetProps, RawImage},
     sdl,
 };
@@ -118,6 +118,7 @@ impl UI {
         let horizon = desktop::HorizonWidget::new(
             CommonWidgetProps::new(&canvas).place(0.5, 0.7).rect(0.12),
             40.0,
+            color::YELLOW.clone(),
         )
         .on_window(&mut win);
 
@@ -168,6 +169,7 @@ impl UI {
         vx.write().unwrap().set_scale(0.05);
         vy.write().unwrap().set_scale(0.05);
         vz.write().unwrap().set_scale(0.05);
+        let bg_texture = sdl::sdl_load_textures(&canvas, vec!["images/bg01.png".to_owned()]);
 
         sensitivity.write().unwrap().inc();
         let mut last_state = GamepadState::initial();
@@ -185,9 +187,27 @@ impl UI {
                 }
                 // clear before drawing
                 sdl::sdl_clear(&mut canvas, 10, 20, 30);
+                let w = self.width as i32;
+                let h = self.height as i32;
+                sdl::sdl_scale_tex(&mut canvas, &bg_texture[0], w / 2, h / 2, w, h);
 
                 // finally draw the game and maintain fps
                 let st = js.state();
+
+                if st.button_clicked(gamepad::Buttons::START, &last_state) {
+                    let flying = tello.flying();
+                    if !flying {
+                        tracing::info!("takeoff");
+                        tello.takeoff();
+                    } else {
+                        tracing::info!("land");
+                        tello.land();
+                    }
+                }
+                if st.button_clicked(gamepad::Buttons::SELECT, &last_state) {
+                    tracing::info!("hover");
+                    tello.hover();
+                }
 
                 let g_data = UPDATE_DATA.read().unwrap();
                 if let Some(ref wifi) = g_data.wifi {
