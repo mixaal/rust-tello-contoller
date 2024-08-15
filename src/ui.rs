@@ -6,6 +6,7 @@ use std::{
 
 use rust_gamepad::gamepad::{self, Gamepad, GamepadState};
 use rust_sdl_ui::{
+    color::RgbColor,
     desktop::{self, CommonWidgetProps, RawImage},
     sdl,
 };
@@ -59,8 +60,8 @@ impl UI {
 
         let video = desktop::VideoWidget::new(
             CommonWidgetProps::new(&canvas)
-                .place(0.5, 0.3)
-                .size(0.4, 0.3),
+                .place(0.5, 0.38)
+                .size(0.4, 0.5),
             &mut canvas,
             960,
             720,
@@ -93,7 +94,7 @@ impl UI {
         .on_window(&mut win);
 
         let vert_thrust = desktop::VertThrustWidget::new(
-            CommonWidgetProps::new(&canvas).place(0.2, 0.2).rect(0.1),
+            CommonWidgetProps::new(&canvas).place(0.1, 0.2).rect(0.1),
         )
         .on_window(&mut win);
 
@@ -133,6 +134,40 @@ impl UI {
             CommonWidgetProps::new(&canvas).place(0.35, 0.7).rect(0.12),
         )
         .on_window(&mut win);
+
+        let temperature = desktop::VertThrustWidget::new(
+            CommonWidgetProps::new(&canvas).place(0.25, 0.2).rect(0.1),
+        )
+        .on_window(&mut win);
+
+        let vx = desktop::VertThrustWidget::new(
+            CommonWidgetProps::new(&canvas).place(0.4, 0.1).rect(0.05),
+        )
+        .on_window(&mut win);
+        let vy = desktop::VertThrustWidget::new(
+            CommonWidgetProps::new(&canvas).place(0.5, 0.1).rect(0.05),
+        )
+        .on_window(&mut win);
+        let vz = desktop::VertThrustWidget::new(
+            CommonWidgetProps::new(&canvas).place(0.6, 0.1).rect(0.05),
+        )
+        .on_window(&mut win);
+
+        let flight_log = desktop::FlightLogWidget::new(
+            CommonWidgetProps::new(&canvas).place(0.65, 0.7).rect(0.12),
+        )
+        .on_window(&mut win);
+
+        let mut t = temperature.write().unwrap();
+        t.set_color1(RgbColor::new(0.0, 0.3, 1.0, 1.0));
+        t.set_color2(RgbColor::new(1.0, 0.0, 0.0, 1.0));
+        t.set(0.0);
+        t.set_color_scale_factor(0.65);
+        t.set_scale(0.01);
+        drop(t);
+        vx.write().unwrap().set_scale(0.05);
+        vy.write().unwrap().set_scale(0.05);
+        vz.write().unwrap().set_scale(0.05);
 
         sensitivity.write().unwrap().inc();
         let mut last_state = GamepadState::initial();
@@ -178,6 +213,18 @@ impl UI {
                             imu.yaw as f32,
                         );
                         drone_yaw.write().unwrap().set(imu.yaw as f32);
+                        temperature.write().unwrap().set(-imu.temperature as f32);
+                    }
+                    if let Some(mvo) = &log_record.mvo {
+                        if let Some(v_x) = mvo.vx {
+                            vx.write().unwrap().set(-v_x as f32);
+                        }
+                        if let Some(v_y) = mvo.vy {
+                            vy.write().unwrap().set(-v_y as f32);
+                        }
+                        if let Some(v_z) = mvo.vz {
+                            vz.write().unwrap().set(-v_z as f32);
+                        }
                     }
                 }
                 drop(g_data);
