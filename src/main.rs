@@ -1,6 +1,6 @@
 use std::{sync::mpsc, thread, time::Duration};
 
-use rust_gamepad::gamepad::{self, Gamepad, GamepadState};
+// use rust_gamepad::gamepad::{self, Gamepad, GamepadState};
 use rust_tello::TelloController;
 use rust_tello_controller::{help::XBOX, ui::UI};
 
@@ -16,8 +16,8 @@ fn main() {
     let (update_tx, update_rx) = rust_tello::comm_channel();
     let (video_tx, video_rx) = mpsc::channel();
 
-    let h = tello.start_ctrl_receiver(update_tx);
-    tello.start_video_receiver(video_tx, 32768);
+    let _h = tello.start_ctrl_receiver(update_tx);
+    tello.start_video_receiver(video_tx);
     tello.start_video_contoller();
 
     tello.connect();

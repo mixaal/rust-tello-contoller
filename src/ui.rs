@@ -1,13 +1,13 @@
 use std::{
-    sync::{mpsc::Receiver, Arc, RwLock},
+    sync::{mpsc::Receiver, RwLock},
     thread,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 use rust_gamepad::gamepad::{self, Gamepad, GamepadState};
 use rust_sdl_ui::{
     color::{self, RgbColor},
-    desktop::{self, CommonWidgetProps, RawImage},
+    desktop::{self, CommonWidgetProps},
     sdl,
 };
 use rust_tello::{TelloController, UpdateData};
@@ -58,14 +58,14 @@ impl UI {
 
         let (mut win, mut canvas) = desktop::Window::new(self.width, self.height, self.fps);
 
-        let video = desktop::VideoWidget::new(
+        let _video = desktop::VideoWidget::new(
             CommonWidgetProps::new(&canvas)
                 .place(0.5, 0.38)
                 .size(0.4, 0.5),
             &mut canvas,
             960,
             720,
-            50,
+            5,
         )
         .on_window(&mut win, video_rx);
 
@@ -100,8 +100,8 @@ impl UI {
 
         let battery = desktop::BatteryStatusWidget::new(
             CommonWidgetProps::new(&canvas)
-                .place(0.1, 0.1)
-                .size(0.01, 0.06),
+                .place(0.1, 0.5)
+                .size(0.02, 0.12),
         )
         .on_window(&mut win);
 
@@ -154,7 +154,7 @@ impl UI {
         )
         .on_window(&mut win);
 
-        let flight_log = desktop::FlightLogWidget::new(
+        let _flight_log = desktop::FlightLogWidget::new(
             CommonWidgetProps::new(&canvas).place(0.65, 0.7).rect(0.12),
         )
         .on_window(&mut win);
@@ -166,18 +166,15 @@ impl UI {
         t.set_color_scale_factor(0.65);
         t.set_scale(0.01);
         drop(t);
-        vx.write().unwrap().set_scale(0.05);
-        vy.write().unwrap().set_scale(0.05);
-        vz.write().unwrap().set_scale(0.05);
+        vx.write().unwrap().set_scale(0.001);
+        vy.write().unwrap().set_scale(0.001);
+        vz.write().unwrap().set_scale(0.001);
         let bg_texture = sdl::sdl_load_textures(&canvas, vec!["images/bg01.png".to_owned()]);
 
         sensitivity.write().unwrap().inc();
         let mut last_state = GamepadState::initial();
         while playing {
-            // reset game state
-
             // main loop
-            let mut now = Instant::now();
             'running: loop {
                 let start = Instant::now();
                 // handle keyboard events
@@ -223,13 +220,16 @@ impl UI {
                         .set(flight.battery_percentage as f32 / 100.0);
                 }
                 if let Some(ref light) = g_data.light {
-                    light_signal.write().unwrap().now();
+                    light_signal
+                        .write()
+                        .unwrap()
+                        .timestamp(light.light_strength_updated);
                 }
                 if let Some(ref log_record) = g_data.log {
                     if let Some(imu) = &log_record.imu {
                         horizon.write().unwrap().set(
-                            imu.pitch as f32,
-                            imu.roll as f32,
+                            -imu.pitch as f32,
+                            -imu.roll as f32,
                             imu.yaw as f32,
                         );
                         drone_yaw.write().unwrap().set(imu.yaw as f32);
@@ -277,10 +277,10 @@ impl UI {
                 let rt = st.rt(sensitivity_valye);
 
                 // control tello
-                tello.forward(ls.0);
-                tello.right(ls.1);
+                tello.forward(-ls.1);
+                tello.right(ls.0);
                 let vert_speed = lt - rt;
-                tello.up(vert_speed);
+                tello.up(-vert_speed);
                 tello.turn_clockwise(rs.0);
 
                 let horiz = st.horiz();
@@ -303,7 +303,6 @@ impl UI {
                 win.draw(&mut canvas);
                 // self.draw(&mut canvas, &mut texture);
                 canvas.present();
-                now = Instant::now();
                 sdl::sdl_maintain_fps(start, self.fps);
                 last_state = st;
             }
