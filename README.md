@@ -5,10 +5,19 @@ Control DJI Ryze Tello from rust with XBOX gamepad
 
 ## Quick Start
 
+### Ubuntu
+
 ```bash
 sudo apt install  libsdl2-gfx-dev libsdl2-image-dev libsdl2-dev libsdl2-ttf-dev
 cargo build --release
 target/release/rust-tello-controller &> flight_log
+```
+
+### Mac Os
+```bash
+brew install sdl2 sdl2_image sdl2_ttf sdl2_gfx
+export LIBRARY_PATH="$LIBRARY_PATH:/opt/homebrew/lib" # search hint for linker
+cargo build --release
 ```
 
 Note: DO NOT use `cargo run` or debug build. The h264 video needs to be optimized and in debug builds 
