@@ -31,6 +31,6 @@ fn main() {
     }
     tello.start_stick_update();
     tracing::info!("use gamepad to fly the drone");
-    let ui = UI::new(3440, 1440);
+    let mut ui = UI::new(3440, 1440);
     ui.mainloop(tello, update_rx, video_rx);
 }
