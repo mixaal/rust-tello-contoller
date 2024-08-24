@@ -4,14 +4,13 @@ use std::{
     time::Instant,
 };
 
-use rust_gamepad::gamepad::{self, Gamepad, GamepadState};
 use rust_sdl_ui::{
     color::{self, RgbColor},
     desktop::{self, CommonWidgetProps},
     sdl,
 };
 use rust_tello::{TelloController, UpdateData};
-use sdl2::{event::Event, keyboard::Keycode};
+use sdl2::{controller::Axis, event::Event, keyboard::Keycode};
 
 use crate::utils;
 
@@ -22,7 +21,8 @@ struct DroneHandling {
     take_off: bool,
     hover: bool,
     sensitivity: f32,
-    vert_thrust: f32,
+    vert_accel: f32,
+    vert_decel: f32,
     slide_right: f32,
     forward: f32,
     turn_clockwise: f32,
@@ -40,10 +40,20 @@ impl DroneHandling {
         self.img_carousel_left = false;
         self.img_carousel_right = false;
         self.img_carousel_toggle_zoom = false;
-        self.forward = Default::default();
-        self.slide_right = Default::default();
-        self.turn_clockwise = Default::default();
-        self.vert_thrust = Default::default();
+    }
+
+    fn sensitivity_dec(&mut self) {
+        self.sensitivity -= 0.2;
+        if self.sensitivity < 0.0 {
+            self.sensitivity = 0.0;
+        }
+    }
+
+    fn sensitivity_inc(&mut self) {
+        self.sensitivity += 0.2;
+        if self.sensitivity > 1.0 {
+            self.sensitivity = 1.0;
+        }
     }
 }
 
@@ -58,7 +68,8 @@ impl Default for DroneHandling {
             img_carousel_right: false,
             img_carousel_toggle_zoom: false,
             sensitivity: 0.2,
-            vert_thrust: Default::default(),
+            vert_accel: Default::default(),
+            vert_decel: Default::default(),
             slide_right: Default::default(),
             forward: Default::default(),
             turn_clockwise: Default::default(),
@@ -107,10 +118,7 @@ impl UI {
         let mut playing = true;
         thread::spawn(move || update_data(ctrl_rx));
 
-        let js = Gamepad::new("/dev/input/js0", gamepad::XBOX_MAPPING.clone());
-        js.background_handler();
-
-        let (mut win, mut canvas) = desktop::Window::new(self.width, self.height, self.fps);
+        let (mut win, mut canvas) = desktop::Window::new(self.width, self.height, self.fps, true);
 
         let _video = desktop::VideoWidget::new(
             CommonWidgetProps::new(&canvas)
@@ -226,15 +234,10 @@ impl UI {
         let bg_texture = sdl::sdl_load_textures(&canvas, vec!["images/bg01.png".to_owned()]);
 
         //sensitivity.write().unwrap().inc();
-        let mut last_state = GamepadState::initial();
         while playing {
             // main loop
             'running: loop {
                 let start = Instant::now();
-
-                // handle joystick
-                let st = js.state();
-                self.joystick_handler(&st, &last_state);
                 // handle keyboard events
                 if self.keyboard_handler(&mut win.event_pump) {
                     playing = false;
@@ -318,9 +321,10 @@ impl UI {
                 sensitivity.write().unwrap().set(self.drone.sensitivity);
 
                 // control tello
+                let vert_speed = self.drone.vert_accel - self.drone.vert_decel;
                 tello.forward(self.drone.forward);
                 tello.right(self.drone.slide_right);
-                tello.up(-self.drone.vert_thrust);
+                tello.up(vert_speed);
                 tello.turn_clockwise(self.drone.turn_clockwise);
 
                 if self.drone.img_carousel_toggle_zoom {
@@ -333,7 +337,7 @@ impl UI {
                     image_carousel.write().unwrap().turn_right();
                 }
 
-                vert_thrust.write().unwrap().set(self.drone.vert_thrust);
+                vert_thrust.write().unwrap().set(-vert_speed);
 
                 let ls = (self.drone.slide_right, -self.drone.forward);
                 let rs = (self.drone.turn_clockwise, 0.0);
@@ -343,63 +347,59 @@ impl UI {
                 win.draw(&mut canvas);
                 canvas.present();
                 sdl::sdl_maintain_fps(start, self.fps);
-                last_state = st;
                 self.drone.zero_state();
             }
         }
         tracing::info!("exiting mainloop");
     }
 
-    fn joystick_handler(&mut self, st: &GamepadState, last_state: &GamepadState) {
-        if st.button_clicked(gamepad::Buttons::START, &last_state) {
-            self.drone.take_off = true;
-        }
-        if st.button_clicked(gamepad::Buttons::SELECT, &last_state) {
-            self.drone.hover = true;
-        }
-        if st.button_clicked(gamepad::Buttons::A, &last_state) {
-            self.drone.take_picture = true;
-        }
-
-        if st.button_clicked(gamepad::Buttons::B, &last_state) {
-            self.drone.toggle_video = true;
-        }
-        if st.button_clicked(gamepad::Buttons::RB, &last_state) {
-            if self.drone.sensitivity + 0.2 <= 1.01 {
-                self.drone.sensitivity += 0.2;
-            }
-        }
-        if st.button_clicked(gamepad::Buttons::LB, &last_state) {
-            if self.drone.sensitivity > 0.19 {
-                self.drone.sensitivity -= 0.2;
-            }
-        }
-
-        let horiz = st.horiz();
-        if st.button_clicked(gamepad::Buttons::X, &last_state) {
-            self.drone.img_carousel_toggle_zoom = true;
-        }
-        if horiz < 0.0 {
-            self.drone.img_carousel_left = true;
-        }
-        if horiz > 0.0 {
-            self.drone.img_carousel_right = true;
-        }
-
-        let ls = st.l_stick(self.drone.sensitivity);
-        let rs = st.r_stick(self.drone.sensitivity);
-        let lt = st.lt(self.drone.sensitivity);
-        let rt = st.rt(self.drone.sensitivity);
-
-        self.drone.forward = -ls.1;
-        self.drone.slide_right = ls.0;
-        self.drone.vert_thrust = lt - rt;
-        self.drone.turn_clockwise = rs.0;
-    }
-
     fn keyboard_handler(&mut self, event_pump: &mut sdl2::EventPump) -> bool {
         for event in event_pump.poll_iter() {
             match event {
+                Event::ControllerButtonUp { button, .. } => {
+                    tracing::info!("Button {:?} up", button);
+                    match button {
+                        sdl2::controller::Button::A => self.drone.take_picture = true,
+                        sdl2::controller::Button::B => self.drone.toggle_video = true,
+                        sdl2::controller::Button::X => self.drone.img_carousel_toggle_zoom = true,
+
+                        sdl2::controller::Button::Guide => self.drone.hover = true,
+                        sdl2::controller::Button::Start => self.drone.take_off = true,
+
+                        sdl2::controller::Button::LeftShoulder => self.drone.sensitivity_dec(),
+                        sdl2::controller::Button::RightShoulder => self.drone.sensitivity_inc(),
+                        sdl2::controller::Button::DPadLeft => self.drone.img_carousel_left = true,
+                        sdl2::controller::Button::DPadRight => self.drone.img_carousel_right = true,
+                        _ => {}
+                    }
+                }
+
+                Event::ControllerAxisMotion {
+                    axis, value: val, ..
+                } => {
+                    tracing::info!("Axis {:?} moved to {}", axis, val);
+                    match axis {
+                        Axis::LeftX => {
+                            self.drone.slide_right = self.drone.sensitivity * val as f32 / 32767.0
+                        }
+                        Axis::LeftY => {
+                            self.drone.forward = -self.drone.sensitivity * val as f32 / 32767.0
+                        }
+                        Axis::RightX => {
+                            self.drone.turn_clockwise =
+                                self.drone.sensitivity * val as f32 / 32767.0
+                        }
+                        Axis::TriggerRight => {
+                            self.drone.vert_accel = self.drone.sensitivity * val as f32 / 32767.0
+                        }
+                        Axis::TriggerLeft => {
+                            self.drone.vert_decel = self.drone.sensitivity * val as f32 / 32767.0
+                        }
+                        _ => {}
+                    }
+                    // }
+                }
+
                 Event::Quit { .. } => {
                     return true;
                 }
@@ -462,14 +462,14 @@ impl UI {
                     keycode: Some(Keycode::Left),
                     ..
                 } => {
-                    self.drone.slide_right = -1.0;
+                    self.drone.slide_right = -self.drone.sensitivity;
                     return false;
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::Right),
                     ..
                 } => {
-                    self.drone.slide_right = 1.0;
+                    self.drone.slide_right = self.drone.sensitivity;
                     return false;
                 }
 
@@ -477,14 +477,14 @@ impl UI {
                     keycode: Some(Keycode::Up),
                     ..
                 } => {
-                    self.drone.forward = 1.0;
+                    self.drone.forward = self.drone.sensitivity;
                     return false;
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::Down),
                     ..
                 } => {
-                    self.drone.forward = -1.0;
+                    self.drone.forward = -self.drone.sensitivity;
                     return false;
                 }
 
@@ -492,14 +492,14 @@ impl UI {
                     keycode: Some(Keycode::A),
                     ..
                 } => {
-                    self.drone.vert_thrust = 1.0;
+                    self.drone.vert_accel = self.drone.sensitivity;
                     return false;
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::Q),
                     ..
                 } => {
-                    self.drone.vert_thrust = -1.0;
+                    self.drone.vert_decel = self.drone.sensitivity;
                     return false;
                 }
 
@@ -537,14 +537,14 @@ impl UI {
                     keycode: Some(Keycode::A),
                     ..
                 } => {
-                    self.drone.vert_thrust = 0.0;
+                    self.drone.vert_accel = 0.0;
                     return false;
                 }
                 Event::KeyUp {
                     keycode: Some(Keycode::Q),
                     ..
                 } => {
-                    self.drone.vert_thrust = 0.0;
+                    self.drone.vert_decel = 0.0;
                     return false;
                 }
                 Event::KeyUp {
