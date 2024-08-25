@@ -216,6 +216,20 @@ impl UI {
         )
         .on_window(&mut win);
 
+        let fly_time = desktop::TextWidget::new(
+            CommonWidgetProps::new(&canvas)
+                .place(0.1, 0.3)
+                .size(0.1, 0.03),
+        )
+        .on_window(&mut win);
+
+        let battery_voltage = desktop::TextWidget::new(
+            CommonWidgetProps::new(&canvas)
+                .place(0.1, 0.4)
+                .size(0.1, 0.03),
+        )
+        .on_window(&mut win);
+
         // let _flight_log = desktop::FlightLogWidget::new(
         //     CommonWidgetProps::new(&canvas).place(0.65, 0.7).rect(0.12),
         // )
@@ -273,6 +287,10 @@ impl UI {
                         .set(wifi.wifi_strength as f32 / 100.0);
                 }
                 if let Some(ref flight) = g_data.flight {
+                    let flt = format!("{} secs", flight.fly_time);
+                    let batt = format!("{} mV", flight.battery_milli_volts);
+                    fly_time.write().unwrap().set(flt);
+                    battery_voltage.write().unwrap().set(batt);
                     battery
                         .write()
                         .unwrap()
