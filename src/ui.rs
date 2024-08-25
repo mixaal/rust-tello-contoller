@@ -122,8 +122,8 @@ impl UI {
 
         let _video = desktop::VideoWidget::new(
             CommonWidgetProps::new(&canvas)
-                .place(0.5, 0.38)
-                .size(0.4, 0.5),
+                .place(0.5, 0.5)
+                .size(0.9, 0.8),
             &mut canvas,
             960,
             720,
@@ -133,7 +133,7 @@ impl UI {
 
         let sensitivity = desktop::HorizSliderWidget::new(
             desktop::CommonWidgetProps::new(&canvas)
-                .place(0.2, 0.5)
+                .place(0.5, 0.8)
                 .size(0.15, 0.003),
             0.0,
             1.0,
@@ -143,20 +143,20 @@ impl UI {
 
         let left_stick = desktop::GamepadStickWidget::new(
             desktop::CommonWidgetProps::new(&canvas)
-                .place(0.2, 0.7)
-                .rect(0.1),
+                .place(0.1, 0.8)
+                .rect(0.08),
         )
         .on_window(&mut win);
 
         let right_stick = desktop::GamepadStickWidget::new(
             desktop::CommonWidgetProps::new(&canvas)
-                .place(0.8, 0.7)
-                .rect(0.1),
+                .place(0.9, 0.8)
+                .rect(0.08),
         )
         .on_window(&mut win);
 
         let vert_thrust = desktop::VertThrustWidget::new(
-            CommonWidgetProps::new(&canvas).place(0.1, 0.2).rect(0.1),
+            CommonWidgetProps::new(&canvas).place(0.1, 0.1).rect(0.05),
         )
         .on_window(&mut win);
 
@@ -168,17 +168,17 @@ impl UI {
         .on_window(&mut win);
 
         let wifi_strength = desktop::WifiStrengthWidget::new(
-            CommonWidgetProps::new(&canvas).place(0.8, 0.2).rect(0.1),
+            CommonWidgetProps::new(&canvas).place(0.95, 0.15).rect(0.08),
         )
         .on_window(&mut win);
 
         let light_signal = desktop::LightSignalWidget::new(
-            CommonWidgetProps::new(&canvas).place(0.8, 0.45).rect(0.1),
+            CommonWidgetProps::new(&canvas).place(0.95, 0.3).rect(0.08),
         )
         .on_window(&mut win);
 
         let horizon = desktop::HorizonWidget::new(
-            CommonWidgetProps::new(&canvas).place(0.5, 0.7).rect(0.12),
+            CommonWidgetProps::new(&canvas).place(0.95, 0.45).rect(0.08),
             40.0,
             color::YELLOW.clone(),
         )
@@ -194,12 +194,12 @@ impl UI {
         .on_window(&mut win);
 
         let drone_yaw = desktop::DroneYawWidget::new(
-            CommonWidgetProps::new(&canvas).place(0.35, 0.7).rect(0.12),
+            CommonWidgetProps::new(&canvas).place(0.95, 0.6).rect(0.08),
         )
         .on_window(&mut win);
 
         let temperature = desktop::VertThrustWidget::new(
-            CommonWidgetProps::new(&canvas).place(0.25, 0.2).rect(0.1),
+            CommonWidgetProps::new(&canvas).place(0.25, 0.1).rect(0.05),
         )
         .on_window(&mut win);
 
@@ -216,10 +216,10 @@ impl UI {
         )
         .on_window(&mut win);
 
-        let _flight_log = desktop::FlightLogWidget::new(
-            CommonWidgetProps::new(&canvas).place(0.65, 0.7).rect(0.12),
-        )
-        .on_window(&mut win);
+        // let _flight_log = desktop::FlightLogWidget::new(
+        //     CommonWidgetProps::new(&canvas).place(0.65, 0.7).rect(0.12),
+        // )
+        // .on_window(&mut win);
 
         let mut t = temperature.write().unwrap();
         t.set_color1(RgbColor::new(0.0, 0.3, 1.0, 1.0));
