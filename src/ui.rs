@@ -253,7 +253,7 @@ impl UI {
             'running: loop {
                 let start = Instant::now();
                 // handle keyboard events
-                if self.keyboard_handler(&mut win.event_pump) {
+                if self.drone_handler(&mut win.event_pump) {
                     playing = false;
                     break 'running;
                 }
@@ -287,8 +287,8 @@ impl UI {
                         .set(wifi.wifi_strength as f32 / 100.0);
                 }
                 if let Some(ref flight) = g_data.flight {
-                    let flt = format!("{} secs", flight.fly_time);
-                    let batt = format!("{} mV", flight.battery_milli_volts);
+                    let flt = format!("{:0>5} secs", flight.fly_time);
+                    let batt = format!("{:0>5} mV", flight.battery_milli_volts);
                     fly_time.write().unwrap().set(flt);
                     battery_voltage.write().unwrap().set(batt);
                     battery
@@ -371,7 +371,7 @@ impl UI {
         tracing::info!("exiting mainloop");
     }
 
-    fn keyboard_handler(&mut self, event_pump: &mut sdl2::EventPump) -> bool {
+    fn drone_handler(&mut self, event_pump: &mut sdl2::EventPump) -> bool {
         for event in event_pump.poll_iter() {
             match event {
                 Event::ControllerButtonUp { button, .. } => {
