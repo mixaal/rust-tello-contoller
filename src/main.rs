@@ -21,14 +21,14 @@ fn main() {
     tello.start_video_contoller();
 
     tello.connect();
-    loop {
-        tracing::info!("waiting to connect to tello...");
-        if tello.is_connected() {
-            tracing::info!("connected to tello");
-            break;
-        }
-        thread::sleep(Duration::from_secs(1));
-    }
+    // loop {
+    //     tracing::info!("waiting to connect to tello...");
+    //     if tello.is_connected() {
+    //         tracing::info!("connected to tello");
+    //         break;
+    //     }
+    //     thread::sleep(Duration::from_secs(1));
+    // }
     tello.start_stick_update();
     tracing::info!("use gamepad to fly the drone");
     let mut ui = UI::new(3440, 1440);

@@ -230,6 +230,13 @@ impl UI {
         )
         .on_window(&mut win);
 
+        let height = desktop::TextWidget::new(
+            CommonWidgetProps::new(&canvas)
+                .place(0.1, 0.2)
+                .size(0.1, 0.03),
+        )
+        .on_window(&mut win);
+
         // let _flight_log = desktop::FlightLogWidget::new(
         //     CommonWidgetProps::new(&canvas).place(0.65, 0.7).rect(0.12),
         // )
@@ -289,7 +296,9 @@ impl UI {
                 if let Some(ref flight) = g_data.flight {
                     let flt = format!("{:0>5} secs", flight.fly_time);
                     let batt = format!("{:0>5} mV", flight.battery_milli_volts);
+                    let hgt = format!("{:0>5} mm", flight.height);
                     fly_time.write().unwrap().set(flt);
+                    height.write().unwrap().set(hgt);
                     battery_voltage.write().unwrap().set(batt);
                     battery
                         .write()
