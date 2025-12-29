@@ -15,17 +15,55 @@ use sdl2::{controller::Axis, event::Event, keyboard::Keycode};
 use crate::utils;
 
 #[derive(Debug)]
-struct DroneHandling {
-    take_picture: bool,
-    toggle_video: bool,
-    take_off: bool,
-    hover: bool,
-    sensitivity: f32,
+struct RawInput {
     vert_accel: f32,
     vert_decel: f32,
     slide_right: f32,
     forward: f32,
     turn_clockwise: f32,
+    sensitivity: f32,
+}
+
+#[derive(Debug)]
+struct ThrustInput {
+    vert_thrust: f32,
+    slide_right: f32,
+    forward: f32,
+    turn_clockwise: f32,
+}
+
+impl Default for RawInput {
+    fn default() -> Self {
+        Self {
+            vert_accel: 0.0,
+            vert_decel: 0.0,
+            slide_right: 0.0,
+            forward: 0.0,
+            turn_clockwise: 0.0,
+            sensitivity: 0.2,
+        }
+    }
+}
+
+impl Default for ThrustInput {
+    fn default() -> Self {
+        Self {
+            vert_thrust: 0.0,
+            slide_right: 0.0,
+            forward: 0.0,
+            turn_clockwise: 0.0,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct DroneHandling {
+    take_picture: bool,
+    toggle_video: bool,
+    take_off: bool,
+    hover: bool,
+    raw_input: RawInput,
+    thust_input: ThrustInput,
     img_carousel_left: bool,
     img_carousel_right: bool,
     img_carousel_toggle_zoom: bool,
@@ -43,17 +81,35 @@ impl DroneHandling {
     }
 
     fn sensitivity_dec(&mut self) {
-        self.sensitivity -= 0.2;
-        if self.sensitivity < 0.0 {
-            self.sensitivity = 0.0;
+        self.raw_input.sensitivity -= 0.2;
+        if self.raw_input.sensitivity < 0.0 {
+            self.raw_input.sensitivity = 0.0;
         }
     }
 
     fn sensitivity_inc(&mut self) {
-        self.sensitivity += 0.2;
-        if self.sensitivity > 1.0 {
-            self.sensitivity = 1.0;
+        self.raw_input.sensitivity += 0.2;
+        if self.raw_input.sensitivity > 1.0 {
+            self.raw_input.sensitivity = 1.0;
         }
+    }
+
+    fn compute_thrust(&mut self) {
+        self.thust_input.vert_thrust =
+            self.raw_input.sensitivity * (self.raw_input.vert_accel - self.raw_input.vert_decel);
+        self.thust_input.slide_right = self.raw_input.sensitivity * self.raw_input.slide_right;
+        self.thust_input.forward = self.raw_input.sensitivity * self.raw_input.forward;
+        println!("forward: {}", self.thust_input.forward);
+        self.thust_input.turn_clockwise =
+            self.raw_input.sensitivity * self.raw_input.turn_clockwise;
+    }
+
+    fn control_tello(&mut self, tello: &mut TelloController) {
+        self.compute_thrust();
+        tello.forward(self.thust_input.forward);
+        tello.right(self.thust_input.slide_right);
+        tello.up(self.thust_input.vert_thrust);
+        tello.turn_clockwise(self.thust_input.turn_clockwise);
     }
 }
 
@@ -67,12 +123,8 @@ impl Default for DroneHandling {
             img_carousel_left: false,
             img_carousel_right: false,
             img_carousel_toggle_zoom: false,
-            sensitivity: 0.2,
-            vert_accel: Default::default(),
-            vert_decel: Default::default(),
-            slide_right: Default::default(),
-            forward: Default::default(),
-            turn_clockwise: Default::default(),
+            raw_input: RawInput::default(),
+            thust_input: ThrustInput::default(),
         }
     }
 }
@@ -345,14 +397,13 @@ impl UI {
                     tello.toggle_video();
                 }
 
-                sensitivity.write().unwrap().set(self.drone.sensitivity);
+                sensitivity
+                    .write()
+                    .unwrap()
+                    .set(self.drone.raw_input.sensitivity);
 
-                // control tello
-                let vert_speed = self.drone.vert_accel - self.drone.vert_decel;
-                tello.forward(self.drone.forward);
-                tello.right(self.drone.slide_right);
-                tello.up(vert_speed);
-                tello.turn_clockwise(self.drone.turn_clockwise);
+                // recompute thrust based in input and control tello
+                self.drone.control_tello(&mut tello);
 
                 if self.drone.img_carousel_toggle_zoom {
                     image_carousel.write().unwrap().toggle_show();
@@ -364,10 +415,17 @@ impl UI {
                     image_carousel.write().unwrap().turn_right();
                 }
 
-                vert_thrust.write().unwrap().set(-vert_speed);
+                // update widgets with current drone state
+                vert_thrust
+                    .write()
+                    .unwrap()
+                    .set(-self.drone.thust_input.vert_thrust);
 
-                let ls = (self.drone.slide_right, -self.drone.forward);
-                let rs = (self.drone.turn_clockwise, 0.0);
+                let ls = (
+                    self.drone.thust_input.slide_right,
+                    -self.drone.thust_input.forward,
+                );
+                let rs = (self.drone.thust_input.turn_clockwise, 0.0);
                 left_stick.write().unwrap().set_stick(ls);
                 right_stick.write().unwrap().set_stick(rs);
 
@@ -405,23 +463,16 @@ impl UI {
                     axis, value: val, ..
                 } => {
                     tracing::info!("Axis {:?} moved to {}", axis, val);
+                    // cast before applying -v to avoid overflow (when val = -32768, since the biggest positive is 32767),
+                    // this is actually very funny since from full forward you get full backward !
+                    // this might cause some impressive crashes :D
+                    let v = val as f32;
                     match axis {
-                        Axis::LeftX => {
-                            self.drone.slide_right = self.drone.sensitivity * val as f32 / 32767.0
-                        }
-                        Axis::LeftY => {
-                            self.drone.forward = -self.drone.sensitivity * val as f32 / 32767.0
-                        }
-                        Axis::RightX => {
-                            self.drone.turn_clockwise =
-                                self.drone.sensitivity * val as f32 / 32767.0
-                        }
-                        Axis::TriggerRight => {
-                            self.drone.vert_accel = self.drone.sensitivity * val as f32 / 32767.0
-                        }
-                        Axis::TriggerLeft => {
-                            self.drone.vert_decel = self.drone.sensitivity * val as f32 / 32767.0
-                        }
+                        Axis::LeftX => self.drone.raw_input.slide_right = v / 32768.0,
+                        Axis::LeftY => self.drone.raw_input.forward = -v / 32768.0,
+                        Axis::RightX => self.drone.raw_input.turn_clockwise = v / 32768.0,
+                        Axis::TriggerRight => self.drone.raw_input.vert_accel = v / 32768.0,
+                        Axis::TriggerLeft => self.drone.raw_input.vert_decel = v / 32768.0,
                         _ => {}
                     }
                     // }
@@ -441,7 +492,7 @@ impl UI {
                     keycode: Some(Keycode::NUM_1),
                     ..
                 } => {
-                    self.drone.sensitivity = 0.0;
+                    self.drone.raw_input.sensitivity = 0.0;
                     return false;
                 }
 
@@ -449,7 +500,7 @@ impl UI {
                     keycode: Some(Keycode::NUM_2),
                     ..
                 } => {
-                    self.drone.sensitivity = 0.2;
+                    self.drone.raw_input.sensitivity = 0.2;
                     return false;
                 }
 
@@ -457,7 +508,7 @@ impl UI {
                     keycode: Some(Keycode::NUM_3),
                     ..
                 } => {
-                    self.drone.sensitivity = 0.4;
+                    self.drone.raw_input.sensitivity = 0.4;
                     return false;
                 }
 
@@ -465,7 +516,7 @@ impl UI {
                     keycode: Some(Keycode::NUM_4),
                     ..
                 } => {
-                    self.drone.sensitivity = 0.6;
+                    self.drone.raw_input.sensitivity = 0.6;
                     return false;
                 }
 
@@ -473,7 +524,7 @@ impl UI {
                     keycode: Some(Keycode::NUM_5),
                     ..
                 } => {
-                    self.drone.sensitivity = 0.8;
+                    self.drone.raw_input.sensitivity = 0.8;
                     return false;
                 }
 
@@ -481,7 +532,7 @@ impl UI {
                     keycode: Some(Keycode::NUM_6),
                     ..
                 } => {
-                    self.drone.sensitivity = 1.0;
+                    self.drone.raw_input.sensitivity = 1.0;
                     return false;
                 }
 
@@ -489,14 +540,14 @@ impl UI {
                     keycode: Some(Keycode::Left),
                     ..
                 } => {
-                    self.drone.slide_right = -self.drone.sensitivity;
+                    self.drone.raw_input.slide_right = -1.0;
                     return false;
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::Right),
                     ..
                 } => {
-                    self.drone.slide_right = self.drone.sensitivity;
+                    self.drone.raw_input.slide_right = 1.0;
                     return false;
                 }
 
@@ -504,14 +555,14 @@ impl UI {
                     keycode: Some(Keycode::Up),
                     ..
                 } => {
-                    self.drone.forward = self.drone.sensitivity;
+                    self.drone.raw_input.forward = 1.0;
                     return false;
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::Down),
                     ..
                 } => {
-                    self.drone.forward = -self.drone.sensitivity;
+                    self.drone.raw_input.forward = -1.0;
                     return false;
                 }
 
@@ -519,14 +570,14 @@ impl UI {
                     keycode: Some(Keycode::A),
                     ..
                 } => {
-                    self.drone.vert_accel = self.drone.sensitivity;
+                    self.drone.raw_input.vert_decel = 1.0;
                     return false;
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::Q),
                     ..
                 } => {
-                    self.drone.vert_decel = self.drone.sensitivity;
+                    self.drone.raw_input.vert_accel = 1.0;
                     return false;
                 }
 
@@ -534,14 +585,14 @@ impl UI {
                     keycode: Some(Keycode::Left),
                     ..
                 } => {
-                    self.drone.slide_right = 0.0;
+                    self.drone.raw_input.slide_right = 0.0;
                     return false;
                 }
                 Event::KeyUp {
                     keycode: Some(Keycode::Right),
                     ..
                 } => {
-                    self.drone.slide_right = 0.0;
+                    self.drone.raw_input.slide_right = 0.0;
                     return false;
                 }
 
@@ -549,14 +600,14 @@ impl UI {
                     keycode: Some(Keycode::Up),
                     ..
                 } => {
-                    self.drone.forward = 0.0;
+                    self.drone.raw_input.forward = 0.0;
                     return false;
                 }
                 Event::KeyUp {
                     keycode: Some(Keycode::Down),
                     ..
                 } => {
-                    self.drone.forward = 0.0;
+                    self.drone.raw_input.forward = 0.0;
                     return false;
                 }
 
@@ -564,14 +615,14 @@ impl UI {
                     keycode: Some(Keycode::A),
                     ..
                 } => {
-                    self.drone.vert_accel = 0.0;
+                    self.drone.raw_input.vert_decel = 0.0;
                     return false;
                 }
                 Event::KeyUp {
                     keycode: Some(Keycode::Q),
                     ..
                 } => {
-                    self.drone.vert_decel = 0.0;
+                    self.drone.raw_input.vert_accel = 0.0;
                     return false;
                 }
                 Event::KeyUp {
